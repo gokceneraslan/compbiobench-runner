@@ -81,29 +81,17 @@ python run_benchmark.py run [options]
 # Basic run with defaults (fully automated, no prompts)
 python run_benchmark.py run --llm claude --model-reasoning-effort high
 
-# Resume a specific run by folder name
-python run_benchmark.py run --llm claude --model-reasoning-effort high --resume claude_opus-4-6_20260329_120000
-
-# Resume and reset workspace for rerun questions
-python run_benchmark.py run --llm claude --model-reasoning-effort high --resume claude_opus-4-6_20260329_120000 --resume-clean-workspace
+# Custom model and parallel workers
+python run_benchmark.py run --llm claude --model-reasoning-effort high -m claude-opus-4-5 -n 10
 
 # Keep environments for debugging
 python run_benchmark.py run --llm claude --model-reasoning-effort high --keep-envs
 
-# Run with permission prompts (not recommended for automation)
-python run_benchmark.py run --llm claude --model-reasoning-effort high --permission-mode default
-
-# Custom model and parallel workers
-python run_benchmark.py run --llm claude --model-reasoning-effort high -m claude-opus-4-5 -n 10
-
-# Long-running questions with 3 hour timeout
-python run_benchmark.py run --llm claude --model-reasoning-effort high -t 180
+# Resume a failed/interrupted run
+python run_benchmark.py run --llm claude --model-reasoning-effort high --resume claude_opus-4-6_20260329_120000
 
 # Exclude specific questions
 python run_benchmark.py run --llm claude --model-reasoning-effort high --exclude q1 q2 q3
-
-# Run in reverse order
-python run_benchmark.py run --llm claude --model-reasoning-effort high --reverse
 ```
 
 #### 2. Run All LLMs
@@ -212,85 +200,60 @@ Each `trace.md` file contains a summary table followed by the LLM's reasoning ch
 
 | Field | Value |
 |-------|-------|
-| **LLM** | claude (claude-opus-4-5) |
-| **Timestamp** | 2026-02-20T00:18:09.118593 |
-| **Elapsed** | 39.47s |
+| **LLM** | claude (claude-opus-4-6) |
+| **Timestamp** | 2026-03-24T17:14:43.229954 |
+| **Elapsed** | 63.91s |
 | **Return Code** | 0 |
-| **Input Tokens** | 63 |
-| **Output Tokens** | 1,121 |
-| **Cost** | $0.3331 |
+| **Input Tokens** | 5 |
+| **Output Tokens** | 2,453 |
+| **Cache Created** | 9,929 |
+| **Cache Read** | 90,765 |
+| **Cost** | $0.1688 |
 
 ## Answer
 
+\`\`\`
 chrX:47574285
+\`\`\`
+
+## Answer Extraction Debug
+
+### full_result_payload
+
+\`\`\`
+Based on the API response, the position is...
+chrX:47574285
+\`\`\`
+
+### extracted_last_non_empty_line
+
+\`\`\`
+chrX:47574285
+\`\`\`
 
 ## LLM Response
 
-**Claude:** I need to find the genomic position...
-
 **Tool: Bash**
 \`\`\`bash
-curl -s "https://api.example.com/variant/rs123456"
+bcftools query -f '%CHROM:%POS\n' variants.vcf
 \`\`\`
 
 **Result:**
 \`\`\`
-{"position": "chrX:47574285"}
+chrX:47574285
 \`\`\`
 
-**Claude:** Based on the API response...
-
-FINAL ANSWER:
-chrX:47574285
+**Claude:** Based on the query results...
 ```
 
 Both providers (Claude, Codex) produce consistently formatted traces with:
 - `**Provider:** message` - Assistant reasoning and explanations
-- `**Provider (thinking):** message` - Internal reasoning (Codex)
 - `**Tool: Name** \`detail\`` - Tool calls with parameters
 - `**Result:** \`\`\`output\`\`\`` - Tool outputs in code blocks
 
-## Configuration
-
-The script uses an LLM provider class architecture. Each provider (Claude, Codex) is a subclass of `LLMProvider` with:
-
-- `name` - Provider identifier
-- `default_model` - Default model to use
-- `model_pricing` - Pricing dictionary for cost calculation
-- `build_command()` - Build CLI command for execution
-- `parse_output()` - Parse CLI output into rich trace and usage stats
-
-**Adding a new provider:**
-
-1. Create a new class extending `LLMProvider`
-2. Add to `LLM_PROVIDERS` registry
-3. Implement `build_command()` and `parse_output()`
-4. Add model pricing
-
-**Example:**
-
-```python
-class MyProvider(LLMProvider):
-    name = "myllm"
-    default_model = "my-model-1"
-    model_pricing = {"my-model-1": (1.00, 5.00)}  # (input, output) per 1M tokens
-
-    def build_command(self, model: str, prompt: str, data_dir: str) -> list[str]:
-        return ["myllm", "--model", model, "-p", prompt]
-
-    def parse_output(self, stdout: str, model: str) -> tuple[str, dict]:
-        # Parse output, return (trace_text, usage_dict)
-        ...
-```
-
 ## Model Pricing
 
-Token pricing is automatically calculated based on `MODEL_PRICING` in the script.
-
-Current models (verify at provider pricing pages):
-
-- **Claude**: Opus 4.5/4.6 ($5/$25 per 1M tokens), Sonnet 4.5/4.6 ($3/$15), Haiku 4.5 ($1/$5) — also includes cache write/read pricing tiers
-- **Codex**: GPT-5.4 ($2.50/$15), GPT-5.3-codex ($1.75/$14), GPT-5.1-codex-mini ($0.25/$2) per 1M tokens
+Token pricing is hardcoded in `run_benchmark.py` and is current as of March 2026. If model pricing has changed, update the `model_pricing` dictionaries in the provider classes (`ClaudeProvider`, `CodexProvider`).
 
 ## Environment Management
 
@@ -314,66 +277,16 @@ conda env update -f environment.yml
 
 ### Conda Isolation (Default)
 
-**Why isolation?**
-- ✅ Prevents cross-contamination between questions
-- ✅ Ensures reproducible results
-- ✅ Catches environment-dependent bugs
-- ✅ Clean slate for each question
-
 **How it works:**
 1. The base `compbio-benchmark` environment is cloned for each question
 2. Each question runs in its own isolated workspace directory
 3. The cloned environment is cleaned up after completion (unless `--keep-envs`)
 4. System-installed LLM CLIs are accessed via full path resolution
 
-**Important Notes:**
-- The LLM CLIs (claude, codex) must be installed at the system level
-- CLIs are typically installed via npm and reside in `~/.miniforge3/bin/` or similar
-- The script automatically resolves full CLI paths for use inside cloned environments
-- Make sure CLIs are authenticated before running benchmarks
-
-**Performance:**
-- Env cloning: ~5-15 seconds per question (using mamba)
-- Env cleanup: ~5-10 seconds per question
-- Trade-off: Slower but more reliable
-
 **Debug failed questions:**
 ```bash
 # Keep environments to inspect state after failures
 python run_benchmark.py run --llm claude --keep-envs
-```
-
-## Resume Failed Runs
-
-If a run fails or is interrupted:
-
-```bash
-# Resume a specific run by folder name
-python run_benchmark.py run --llm claude --model-reasoning-effort high --resume claude_opus-4-6_20260329_120000
-
-# Resume and clear workspace before rerunning failed questions
-python run_benchmark.py run --llm claude --model-reasoning-effort high --resume claude_opus-4-6_20260329_120000 --resume-clean-workspace
-```
-
-The runner:
-- ✅ Skips questions with successful results
-- ✅ Re-runs failed questions
-- ✅ Appends to existing log
-- ✅ Preserves previous results
-
-## Cost Tracking
-
-All costs are automatically calculated and tracked:
-
-- Per-question costs in output files
-- Total cost in console output
-- Token breakdowns (input, output, cached)
-- Cost summaries in merged CSV
-
-**Example output:**
-
-```
-Done! OK: 2 | Errors: 0 | Total Cost: $0.6483
 ```
 
 ## Development
