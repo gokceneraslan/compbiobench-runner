@@ -258,6 +258,6 @@ python run_benchmark.py run-all --model-reasoning-effort high -i test_benchmark.
 
 ### Contributors
 
-- Gokcen Eraslan (@gokceneraslan)
-- Surag Nair (@suragnair)
+- [Gokcen Eraslan](https://github.com/gokceneraslan)
+- [Surag Nair](https://github.com/suragnair)
 - Claude Code
