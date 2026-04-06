@@ -1,16 +1,16 @@
-# Agent Benchmark Runner
+# CompBioBench Runner
 
-A robust benchmarking framework for evaluating LLM CLI agents (Claude Code, Codex) with isolated conda environments and structured output formats.
+A benchmarking framework for evaluating LLM CLI agents (Claude Code, Codex) with isolated conda environments and structured output formats.
 
 ## Features
 
-- 🔒 **Isolated Environments**: Each question runs in a fresh conda environment (default)
-- 📊 **Structured Output**: Markdown files with tables, metadata, and performance metrics
-- 💰 **Cost Tracking**: Detailed token usage and cost breakdowns per question
-- 🔄 **Resumable**: Resume failed runs without re-running successful questions
-- ⚡ **Parallel Execution**: Run multiple questions concurrently
-- 📈 **Multiple LLMs**: Support for Claude and Codex CLIs
-- 📝 **Rich Logging**: Structured trace files with headers and clear separation
+- **Isolated Environments**: Each question runs in a fresh conda environment (default)
+- **Structured Output**: Markdown files with tables, metadata, and performance metrics
+- **Cost Tracking**: Detailed token usage and cost breakdowns per question
+- **Resumable**: Resume failed runs without re-running successful questions
+- **Parallel Execution**: Run multiple questions concurrently
+- **Multiple LLMs**: Support for Claude and Codex CLIs
+- **Rich Logging**: Structured trace files with headers and clear separation
 
 ## Quick Start
 
