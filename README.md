@@ -193,63 +193,7 @@ benchmark_runs/
 
 Each `trace.md` file contains a summary table followed by the LLM's reasoning chain:
 
-```markdown
-# Trace: question-id-q001
-
-## Summary
-
-| Field | Value |
-|-------|-------|
-| **LLM** | claude (claude-opus-4-6) |
-| **Timestamp** | 2026-03-24T17:14:43.229954 |
-| **Elapsed** | 63.91s |
-| **Return Code** | 0 |
-| **Input Tokens** | 5 |
-| **Output Tokens** | 2,453 |
-| **Cache Created** | 9,929 |
-| **Cache Read** | 90,765 |
-| **Cost** | $0.1688 |
-
-## Answer
-
-\`\`\`
-chrX:47574285
-\`\`\`
-
-## Answer Extraction Debug
-
-### full_result_payload
-
-\`\`\`
-Based on the API response, the position is...
-chrX:47574285
-\`\`\`
-
-### extracted_last_non_empty_line
-
-\`\`\`
-chrX:47574285
-\`\`\`
-
-## LLM Response
-
-**Tool: Bash**
-\`\`\`bash
-bcftools query -f '%CHROM:%POS\n' variants.vcf
-\`\`\`
-
-**Result:**
-\`\`\`
-chrX:47574285
-\`\`\`
-
-**Claude:** Based on the query results...
-```
-
-Both providers (Claude, Codex) produce consistently formatted traces with:
-- `**Provider:** message` - Assistant reasoning and explanations
-- `**Tool: Name** \`detail\`` - Tool calls with parameters
-- `**Result:** \`\`\`output\`\`\`` - Tool outputs in code blocks
+Each `trace.md` contains a summary table, the extracted answer, and the full LLM reasoning chain with tool calls and results formatted as readable markdown.
 
 ## Model Pricing
 
