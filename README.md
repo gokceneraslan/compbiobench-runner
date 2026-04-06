@@ -255,3 +255,9 @@ python run_benchmark.py run --llm claude --model-reasoning-effort high -i test_b
 # Test all providers
 python run_benchmark.py run-all --model-reasoning-effort high -i test_benchmark.csv
 ```
+
+### Contributors
+
+- Gokcen Eraslan (@gokceneraslan)
+- Surag Nair (@suragnair)
+- Claude Code
