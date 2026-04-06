@@ -1,6 +1,6 @@
 # Agent Benchmark Runner
 
-A robust benchmarking framework for evaluating LLM CLI agents (Claude, Codex, Gemini) with isolated conda environments and structured output formats.
+A robust benchmarking framework for evaluating LLM CLI agents (Claude Code, Codex) with isolated conda environments and structured output formats.
 
 ## Features
 
@@ -9,7 +9,7 @@ A robust benchmarking framework for evaluating LLM CLI agents (Claude, Codex, Ge
 - 💰 **Cost Tracking**: Detailed token usage and cost breakdowns per question
 - 🔄 **Resumable**: Resume failed runs without re-running successful questions
 - ⚡ **Parallel Execution**: Run multiple questions concurrently
-- 📈 **Multiple LLMs**: Support for Claude, Codex, and Gemini CLIs
+- 📈 **Multiple LLMs**: Support for Claude and Codex CLIs
 - 📝 **Rich Logging**: Structured trace files with headers and clear separation
 
 ## Quick Start
@@ -23,13 +23,9 @@ A robust benchmarking framework for evaluating LLM CLI agents (Claude, Codex, Ge
    # Then authenticate:
    claude login
 
-   # For Codex (example - follow official installation)
+   # For Codex (install from https://github.com/openai/codex)
    # Then authenticate:
    codex auth
-
-   # For Gemini (example - follow official installation)
-   # Then authenticate:
-   gemini auth
    ```
 
 **Note:** The LLM CLI must be installed at the system level and accessible in your PATH. The conda environments created per question provide Python isolation but use your system-installed CLI.
@@ -37,8 +33,8 @@ A robust benchmarking framework for evaluating LLM CLI agents (Claude, Codex, Ge
 ### Installation
 
 ```bash
-git clone git@ssh.code.roche.com:braid/teams/braid-relu/agent-benchmark-runner.git
-cd agent-benchmark-runner
+git clone https://github.com/genentech/compbiobench-runner.git
+cd compbiobench-runner
 ```
 
 ### Run Your First Benchmark
@@ -65,8 +61,8 @@ python run_benchmark.py run [options]
 ```
 
 **Options:**
-- `--llm {claude,codex,gemini}` - LLM to use (default: claude)
-- `-m, --model MODEL` - Model name (default: provider's default)
+- `--llm {claude,codex}` - LLM to use (default: claude)
+- `-m, --model MODEL` - Model name(s), comma-separated for multiple (default: provider's default)
 - `-i, --input FILE` - Input CSV file (default: benchmark.csv)
 - `-n, --parallel N` - Parallel workers (default: 5)
 - `-t, --timeout MIN` - Timeout per question in minutes (default: 120)
@@ -116,16 +112,16 @@ python run_benchmark.py run --llm claude --model-reasoning-effort high --reverse
 python run_benchmark.py run-all [options]
 ```
 
-Runs benchmark with all available LLMs and merges results.
+Runs benchmark with all available LLMs (Claude, Codex) and merges results.
 
 **Examples:**
 
 ```bash
 # Run all LLMs with defaults
-python run_benchmark.py run-all
+python run_benchmark.py run-all --model-reasoning-effort high
 
 # Specify output file
-python run_benchmark.py run-all -o results.csv
+python run_benchmark.py run-all --model-reasoning-effort high -o results.csv
 ```
 
 #### 3. Merge Results
@@ -151,52 +147,11 @@ python run_benchmark.py merge
 python run_benchmark.py merge --runs-dir my_runs -o merged.csv
 ```
 
-#### 4. Prepare Benchmark
-
-```bash
-python run_benchmark.py prepare [options]
-```
-
-Convert Excel file to benchmark CSV format.
-
-**Options:**
-- `-i, --input FILE` - Input Excel file (default: questions.xlsx)
-- `-o, --output FILE` - Output CSV file (default: benchmark.csv)
-- `-s, --sheet NAME` - Sheet name (default: benchmark)
-- `--keep` - Keep original Excel file after conversion
-
-**Examples:**
-
-```bash
-# Convert Excel to CSV
-python run_benchmark.py prepare -i questions.xlsx -o benchmark.csv
-
-# Keep original file
-python run_benchmark.py prepare --keep
-```
-
 ## Input Format
-
-### Excel File Format (xlsx)
-
-When using `prepare` command to convert from Excel, the xlsx file must contain these columns (row 2 is the header row):
-
-**Required columns:**
-- `question_id` - Unique identifier for each question
-- `question` - The question text to send to the LLM
-- `file_paths` - Comma-separated file paths for LLM access
-
-**Optional columns:**
-- `curator_name` - Name of the person who created the question
-- `domain` - Domain category (e.g., Genomics, Transcriptomics)
-- `date_added` - Date the question was added
-- `curator_difficulty_rating` - Difficulty rating (1-5), mapped to `difficulty` in output CSV
-
-> **Note:** If required columns are missing, the `prepare` command will raise a `ValueError` with details about which columns are missing and what columns were found.
 
 ### Benchmark CSV Format
 
-Benchmark CSV (output from `prepare` or manually created) must have:
+The benchmark CSV must have:
 
 - `question_id` - Unique identifier
 - `question` - The question text
@@ -219,7 +174,7 @@ Each benchmark run creates a timestamped directory with per-question subdirector
 
 ```
 benchmark_runs/
-└── claude_claude-sonnet-4-5_20260210_205111/
+└── claude_claude-opus-4-6_20260324_170425/
     ├── run_metadata.json              # Run configuration
     ├── benchmark.log                  # Full execution log
     └── questions/
@@ -227,11 +182,15 @@ benchmark_runs/
         │   ├── prompt.md              # 📖 Input prompt sent to LLM
         │   ├── result.json            # 🤖 Full results with metadata
         │   ├── trace.md               # 📖 Formatted reasoning chain
+        │   ├── raw_stdout.jsonl       # Raw CLI stdout (JSONL)
+        │   ├── raw_stderr.txt         # Raw CLI stderr
         │   └── workspace/             # Isolated work directory
         └── question-id-q002/
             ├── prompt.md
             ├── result.json
             ├── trace.md
+            ├── raw_stdout.jsonl
+            ├── raw_stderr.txt
             └── workspace/
 ```
 
@@ -239,6 +198,8 @@ benchmark_runs/
 - **prompt.md** - The exact prompt sent to the LLM
 - **result.json** - Complete results including answer, tokens, cost, and raw output
 - **trace.md** - Human-readable formatted trace with tables and tool calls
+- **raw_stdout.jsonl** - Raw JSONL output from the CLI
+- **raw_stderr.txt** - Raw stderr output from the CLI
 
 ### Rich Trace Files
 
@@ -283,7 +244,7 @@ FINAL ANSWER:
 chrX:47574285
 ```
 
-All three providers (Claude, Codex, Gemini) produce consistently formatted traces with:
+Both providers (Claude, Codex) produce consistently formatted traces with:
 - `**Provider:** message` - Assistant reasoning and explanations
 - `**Provider (thinking):** message` - Internal reasoning (Codex)
 - `**Tool: Name** \`detail\`` - Tool calls with parameters
@@ -291,7 +252,7 @@ All three providers (Claude, Codex, Gemini) produce consistently formatted trace
 
 ## Configuration
 
-The script uses an LLM provider class architecture. Each provider (Claude, Codex, Gemini) is a subclass of `LLMProvider` with:
+The script uses an LLM provider class architecture. Each provider (Claude, Codex) is a subclass of `LLMProvider` with:
 
 - `name` - Provider identifier
 - `default_model` - Default model to use
@@ -330,7 +291,6 @@ Current models (verify at provider pricing pages):
 
 - **Claude**: Opus 4.5/4.6 ($5/$25 per 1M tokens), Sonnet 4.5/4.6 ($3/$15), Haiku 4.5 ($1/$5) — also includes cache write/read pricing tiers
 - **Codex**: GPT-5.4 ($2.50/$15), GPT-5.3-codex ($1.75/$14), GPT-5.1-codex-mini ($0.25/$2) per 1M tokens
-- **Gemini**: 3.1 Pro ($2/$12), 3 Pro ($2/$12), 3 Flash ($0.50/$3), 2.5 Pro ($1.25/$10), 2.5 Flash ($0.30/$2.50), 2.5 Flash Lite ($0.10/$0.40) per 1M tokens
 
 ## Environment Management
 
@@ -341,7 +301,7 @@ The base conda environment is defined in `environment.yml` and includes:
 - **Python 3.11** with scientific computing packages (numpy, pandas, scipy)
 - **Bioinformatics tools** (biopython, pysam, pybedtools)
 - **Data analysis** (matplotlib, seaborn, scikit-learn)
-- **Node.js** (required for Gemini and Codex CLIs)
+- **Node.js** (required for Codex CLI)
 
 **Setup:**
 ```bash
@@ -367,7 +327,7 @@ conda env update -f environment.yml
 4. System-installed LLM CLIs are accessed via full path resolution
 
 **Important Notes:**
-- The LLM CLIs (claude, codex, gemini) must be installed at the system level
+- The LLM CLIs (claude, codex) must be installed at the system level
 - CLIs are typically installed via npm and reside in `~/.miniforge3/bin/` or similar
 - The script automatically resolves full CLI paths for use inside cloned environments
 - Make sure CLIs are authenticated before running benchmarks
@@ -416,43 +376,6 @@ All costs are automatically calculated and tracked:
 Done! OK: 2 | Errors: 0 | Total Cost: $0.6483
 ```
 
-## Troubleshooting
-
-### OpenSSL Errors with Git Push
-
-If you see "OpenSSL version mismatch" when pushing:
-
-```bash
-LD_LIBRARY_PATH=/lib/x86_64-linux-gnu:/usr/lib/x86_64-linux-gnu git push
-```
-
-### Conda Environment Creation Fails
-
-Check conda is working:
-
-```bash
-conda --version
-conda env list
-```
-
-### LLM CLI Not Found
-
-Ensure the CLI is in your PATH:
-
-```bash
-which claude
-which codex
-which gemini
-```
-
-### Question Timeouts
-
-Increase timeout for long-running questions:
-
-```bash
-python run_benchmark.py run --llm claude --model-reasoning-effort high -t 120  # 2 hours
-```
-
 ## Development
 
 ### Adding New LLM Backend
@@ -475,18 +398,3 @@ python run_benchmark.py run --llm claude --model-reasoning-effort high -i test_b
 # Test all providers
 python run_benchmark.py run-all --model-reasoning-effort high -i test_benchmark.csv
 ```
-
-## Contributing
-
-1. Create feature branch
-2. Test thoroughly with test_benchmark.csv
-3. Update documentation
-4. Push and create merge request
-
-## License
-
-Internal Roche project - see your organization's policies.
-
-## Support
-
-For issues, contact the BRAID-ReLU team or file an issue in GitLab.
