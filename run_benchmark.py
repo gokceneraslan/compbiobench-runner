@@ -55,6 +55,7 @@ import shutil
 import signal
 import subprocess
 import sys
+import tempfile
 import time
 import uuid
 from abc import ABC, abstractmethod
@@ -347,6 +348,11 @@ class LLMProvider(ABC):
         env = os.environ.copy()
         env.pop("CLAUDECODE", None)
 
+        # Isolate the CLI's home for the preflight probe too, so it neither reads
+        # nor seeds persistent state (mirrors execute_llm_process). Seeding creds
+        # here also validates that auth still works from an isolated home.
+        probe_home_dir = isolate_cli_state(self.name, env)
+
         try:
             result = subprocess.run(cmd, capture_output=True, text=True, timeout=timeout, env=env)
             if result.returncode == 0:
@@ -373,6 +379,9 @@ class LLMProvider(ABC):
             return False, f"CLI {self.name!r} not found"
         except Exception as e:
             return False, f"Error testing model {model!r}: {e}"
+        finally:
+            if probe_home_dir:
+                shutil.rmtree(probe_home_dir, ignore_errors=True)
 
     def get_model_pricing(self, model: str) -> tuple[float, float]:
         """Get pricing per 1M tokens (input, output) for a model."""
@@ -1315,6 +1324,71 @@ def cleanup_conda_env(env_name: str, logger: logging.Logger) -> None:
         logger.warning(f"Failed to cleanup conda env {env_name}: {e}")
 
 
+# ---------------------------------------------------------------------------
+# Per-invocation CLI state isolation
+# ---------------------------------------------------------------------------
+# Each agent CLI keeps persistent per-user state under a home/config directory:
+# auto-memory, chat/session history, and resumable state DBs. If that directory
+# persists across questions (a single shared machine, or e.g. ~/.claude symlinked
+# to durable storage), a LATER invocation can read an EARLIER one's stored answer
+# and simply recall it instead of solving from scratch. That silently contaminates
+# repeated runs / ensembles (a setup this harness supports) and inflates accuracy.
+# Every benchmark question must be an independent COLD START, so we point each CLI
+# at a fresh temp home per invocation and delete it afterwards.
+#
+# We seed the fresh home with only the credential/config files needed for auth
+# (copied best-effort; missing files are skipped). This preserves BOTH auth modes:
+# env-var auth (CLAUDE_CODE_USE_BEDROCK / ANTHROPIC_API_KEY / OPENAI_API_KEY / ...)
+# works with an empty home and skips the copy; file-based login (`claude login`,
+# `codex login`, `gemini` OAuth) is carried forward via its credential file. All
+# volatile state (sessions, history, memory, state DBs) is left empty. A broken seed
+# surfaces immediately via the model preflight, so failures are loud, not silent.
+#
+#   cli name -> (home env var, default home, config subdir the CLI creates, [seed files])
+_CLI_HOME_ISOLATION: dict[str, tuple[str, str, str, list[str]]] = {
+    "claude": ("CLAUDE_CONFIG_DIR", "~/.claude", "",        [".credentials.json"]),
+    "codex":  ("CODEX_HOME",        "~/.codex",  "",        ["auth.json", "config.toml"]),
+    "gemini": ("GEMINI_CLI_HOME",   "~/.gemini", ".gemini", ["oauth_creds.json",
+                                                             "google_accounts.json",
+                                                             "settings.json"]),
+}
+
+
+def isolate_cli_state(cli_name: str, env: dict, logger: logging.Logger | None = None,
+                      tag: str = "") -> str | None:
+    """Redirect a CLI's home/config dir to a FRESH temp dir for one invocation.
+
+    Mutates ``env`` to point the CLI's home env var at the temp dir and seeds it
+    with credential/config files so auth survives. Returns the temp dir path (the
+    caller MUST ``shutil.rmtree`` it), or None if this CLI has no known mechanism.
+    """
+    # cli_name may be a full path: build_llm_command rewrites cmd[0] to the absolute
+    # CLI path so it resolves inside cloned conda envs. Match on the basename.
+    cli = os.path.basename(cli_name)
+    spec = _CLI_HOME_ISOLATION.get(cli)
+    if not spec:
+        return None
+    env_var, default_home, config_subdir, seed_files = spec
+    tmp = tempfile.mkdtemp(prefix=f"cbb-{cli}-home-")
+    # Read creds from the CLI's REAL home (honoring an already-set env var), then
+    # override the env var to the fresh dir.
+    src_home = env.get(env_var) or os.path.expanduser(default_home)
+    dest_root = os.path.join(tmp, config_subdir) if config_subdir else tmp
+    os.makedirs(dest_root, exist_ok=True)
+    for fname in seed_files:
+        src = os.path.join(src_home, fname)
+        if os.path.isfile(src):
+            try:
+                shutil.copy2(src, os.path.join(dest_root, fname))
+            except OSError as e:
+                if logger:
+                    logger.warning(f"{tag}Could not seed {fname!r} into isolated {env_var}: {e}")
+    env[env_var] = tmp
+    if logger:
+        logger.debug(f"{tag}Isolated {env_var} -> {tmp}")
+    return tmp
+
+
 def execute_llm_process(
     cmd: list[str],
     work_dir: str,
@@ -1345,6 +1419,12 @@ def execute_llm_process(
     # Create environment without CLAUDECODE to allow nested Claude Code sessions
     env = os.environ.copy()
     env.pop("CLAUDECODE", None)  # Remove to prevent "nested session" error
+
+    # Per-invocation state isolation: give the agent CLI a fresh home/config dir so
+    # each question is a cold start with no cross-invocation memory/history recall.
+    # cmd[0] is the CLI name here (before the conda-run wrap below prepends "conda").
+    isolated_home_dir = isolate_cli_state(cmd[0] if cmd else "", env, logger,
+                                          tag=f"[{question_id}] ")
 
     # Wrap command with conda run if conda_env is specified
     if conda_env:
@@ -1386,6 +1466,9 @@ def execute_llm_process(
     finally:
         # Unregister process after completion
         unregister_process(process)
+        # Remove the per-invocation isolated CLI home dir (best-effort; never fatal).
+        if isolated_home_dir:
+            shutil.rmtree(isolated_home_dir, ignore_errors=True)
 
     stdout_thread.join(timeout=5)
     stderr_thread.join(timeout=5)
